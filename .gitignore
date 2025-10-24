@@ -1,0 +1,130 @@
+# ---- Root .gitignore for PerryOps ----
+# This complements the Flutter project-specific .gitignores under Frontend/perryops/**
+# OS junk
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Editor/IDE
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Logs and temp
+*.log
+logs/
+*.tmp
+*.swp
+*.swo
+
+# Node/JS (if used in Backend or tooling)
+node_modules/
+dist/
+.next/
+.nuxt/
+.bun/
+.pnpm-store/
+.yarn/*
+!.yarn/patches/
+!.yarn/releases/
+!.yarn/plugins/
+!.yarn/sdks/
+!.yarn/versions/
+
+# Python (if used in Backend or tooling)
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.env
+.env.*
+.python-version
+
+# Java/Gradle
+.gradle/
+build/
+!Frontend/perryops/android/gradle/
+.gradle/6.*/
+.gradle/7.*/
+
+# Android
+local.properties
+*.aab
+*.apk
+*.ap_*
+*.keystore
+*.jks
+.cxx/
+captures/
+
+# iOS / Xcode
+DerivedData/
+xcuserdata/
+*.xccheckout
+*.xcuserstate
+*.xcscmblueprint
+*.xcworkspace/xcuserdata/
+Pods/
+
+# Flutter/Dart (root-level; project-specific ignores already exist under Frontend/perryops)
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.fvm/
+.melos_tool/
+.pub-cache/
+# Flutter build outputs (frontend already ignores, but keep as safeguard at root)
+Frontend/perryops/build/
+
+# Coverage and reports
+coverage/
+.junit/
+report/
+reports/
+
+# System files
+Thumbs.db
+Desktop.ini
+
+# Misc cache
+.cache/
+.tmp/
+
+# Swift/Apple tooling
+.build/
+.swiftpm/
+
+# CocoaPods at root (safety)
+Podfile.lock
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+
+# Ruby/Bundle (if used)
+.bundle/
+Gemfile.lock
+
+# IntelliJ Flutter specific cache
+Frontend/perryops/.dart_tool/
+Frontend/perryops/.flutter-plugins
+Frontend/perryops/.flutter-plugins-dependencies
+
+# Ignore macOS build intermediates inside platform dirs just in case
+Frontend/perryops/ios/Pods/
+Frontend/perryops/macos/DerivedData/
+
+# End of file
