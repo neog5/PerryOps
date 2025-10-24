@@ -2,7 +2,7 @@ name: perryops
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -45,17 +45,44 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.13.1 # or latest
+
+flutter_launcher_icons:
+  image_path: assets/app_icon.png
+
+  # Platforms to generate for (enable/disable as needed)
+  android: true
+  ios: true
+  web:
+    generate: true
+    image_path: assets/app_icon.png
+    background_color: "#FFFFFF"
+    theme_color: "#000000"
+  macos:
+    generate: true
+    image_path: assets/app_icon.png
+  windows:
+    generate: true
+    image_path: assets/app_icon.png
+  linux:
+    generate: true
+    image_path: assets/app_icon.png
+
+  # Optional: Adaptive icon settings for Android
+  adaptive_icon_background: "#FFFFFF" # or a background asset
+  # adaptive_icon_foreground: assets/app_icon_fg.png
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:
+    - assets/app_icon.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
