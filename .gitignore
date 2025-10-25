@@ -66,6 +66,12 @@ local.properties
 *.jks
 .cxx/
 captures/
+*.hprof
+
+# Firebase platform configs (do not commit secrets)
+Frontend/perryops/android/app/google-services.json
+Frontend/perryops/ios/Runner/GoogleService-Info.plist
+Frontend/perryops/macos/Runner/GoogleService-Info.plist
 
 # iOS / Xcode
 DerivedData/
