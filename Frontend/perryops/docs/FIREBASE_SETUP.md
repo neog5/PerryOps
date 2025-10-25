@@ -12,7 +12,7 @@ These are ignored by `.gitignore` in this repo. Keep your own copies locally.
 
 ## Android
 
-1) In Firebase Console, add an Android app with your applicationId. By default this project uses:
+1. In Firebase Console, add an Android app with your applicationId. By default this project uses:
 
 ```
 com.example.perryops
@@ -20,13 +20,13 @@ com.example.perryops
 
 If you change `applicationId` in `android/app/build.gradle.kts`, regenerate the file from Firebase with the new package name.
 
-2) Download `google-services.json` and place it at:
+2. Download `google-services.json` and place it at:
 
 ```
 Frontend/perryops/android/app/google-services.json
 ```
 
-3) Build/run:
+3. Build/run:
 
 ```
 flutter clean
@@ -35,18 +35,20 @@ flutter run
 ```
 
 Notes:
+
 - AndroidX and Jetifier are enabled in `android/gradle.properties`.
 - NDK is pinned to a version compatible with Firebase plugins.
 
 ## iOS
 
-1) In Firebase Console, add an iOS app with your Bundle Identifier (Xcode target `Runner`).
-2) Download `GoogleService-Info.plist` and add it to Xcode under `Runner` (Copy items if needed).
-3) Enable capabilities in Xcode:
-	 - Push Notifications
-	 - Background Modes → Remote notifications
+1. In Firebase Console, add an iOS app with your Bundle Identifier (Xcode target `Runner`).
+2. Download `GoogleService-Info.plist` and add it to Xcode under `Runner` (Copy items if needed).
+3. Enable capabilities in Xcode:
 
-4) Run:
+   - Push Notifications
+   - Background Modes → Remote notifications
+
+4. Run:
 
 ```
 flutter clean
@@ -76,6 +78,7 @@ POST /patient/{patient_id}/register-device-token
 ## Foreground/background handling
 
 The app listens for:
+
 - Foreground messages (in-app handling)
 - Notification taps (app opened from background)
 - Initial message (app opened from a terminated state)
@@ -86,4 +89,3 @@ If you want a visible banner while foregrounded, integrate `flutter_local_notifi
 
 - Firebase keys in these files are client-side identifiers, not secrets, but restrict usage in Google Cloud where possible.
 - Never commit these files. If they were accidentally committed, rotate the keys and remove them from git history (this repo has already been cleaned).
-
