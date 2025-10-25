@@ -1,0 +1,10 @@
+# Firebase Configuration Template
+# Copy this to .env and replace with your actual values
+
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_PRIVATE_KEY_CONTENT_HERE\n-----END PRIVATE KEY-----\n"
+FIREBASE_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+
+# App Configuration
+DEBUG=True
+SECRET_KEY=your-secret-key-here

@@ -196,3 +196,69 @@ def update_device_token(patient_id: str, device_token: str):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update device token: {str(e)}")
+
+# Approved Data Endpoint commented  
+# @router.post("/approved-data")
+# def save_approved_data(data: ApprovedReminderData):
+#     try:
+#         db = get_firestore_client()
+
+#         action = data.action.lower()
+#         reminder_dt = data.reminder_datetime  # required field, may be null
+
+#         # Case: HOLD → datetime required
+#         if action == "hold":
+#             if reminder_dt is None:
+#                 raise HTTPException(
+#                     status_code=400,
+#                     detail="For action='hold', reminder_datetime must NOT be null"
+#                 )
+
+#             # Convert to UTC timezone aware
+#             try:
+#                 rd = datetime.fromisoformat(reminder_dt)
+#                 if rd.tzinfo is None:
+#                     rd = rd.replace(tzinfo=timezone.utc)
+#                 else:
+#                     rd = rd.astimezone(timezone.utc)
+#             except:
+#                 raise HTTPException(status_code=400, detail="Invalid datetime format for reminder_datetime")
+
+#         # Case: CONTINUE → datetime must be null
+#         elif action == "continue":
+#             rd = None
+#             if reminder_dt is not None:
+#                 raise HTTPException(
+#                     status_code=400,
+#                     detail="For action='continue', reminder_datetime must be null"
+#                 )
+
+#         else:
+#             raise HTTPException(status_code=400, detail="action must be 'hold' or 'continue'")
+
+
+#         reminder_doc = {
+#             "patient_id": data.patient_id,
+#             "medicine": data.medicine,
+#             "action": action,
+#             "type": data.type.lower(),
+#             "notes": data.notes or "",
+#             "status": "pending",
+#             "created_at": datetime.now(timezone.utc),   # always store UTC
+#             "reminder_datetime": rd                     # None for continue, datetime for hold
+#         }
+
+#        # save to firestore
+#         db.collection("reminders").add(reminder_doc)
+
+#         return {
+#             "message": "Approved reminder saved successfully",
+#             "saved_data": reminder_doc
+#         }
+
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         print("Error saving approved data:", e)
+#         raise HTTPException(status_code=500, detail="Failed to save approved data")
+

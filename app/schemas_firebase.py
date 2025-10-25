@@ -64,6 +64,17 @@ class CPCReport(CPCReportBase):
     class Config:
         from_attributes = True
 
+# Approved Data Schema
+
+# class ApprovedReminderData(BaseModel):
+#     patient_id: str
+#     medicine: str
+#     action: str     # "hold" or "continue"
+#     type: str
+#     notes: str | None = None
+#     reminder_datetime: str | None    # always present, null only for continue
+
+
 # Reminder Types
 class ReminderType(str, Enum):
     MEDICATION = "medication"
