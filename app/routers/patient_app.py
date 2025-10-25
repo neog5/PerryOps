@@ -76,7 +76,7 @@ def get_patient_schedule(patient_id: str):
     return {
         "patient_id": patient_id,
         "surgery_date": surgery_date,
-        "reminders": reminders[:3],  # Show only first 3 for testing
+        "reminders": reminders,  # Show all reminders
         "total_reminders": total_reminders,
         "completed_reminders": completed_reminders,
         "is_optimized": is_optimized
