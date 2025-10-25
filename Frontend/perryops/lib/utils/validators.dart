@@ -18,8 +18,8 @@ class Validators {
   }
 
   static String? password(String? value, {int min = 8}) {
+    // Only require non-empty; no length validation as per current requirements.
     if (value == null || value.isEmpty) return 'Password is required';
-    if (value.length < min) return 'Password must be at least $min characters';
     return null;
   }
 

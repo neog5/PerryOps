@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/ui.dart';
 
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
@@ -7,50 +8,47 @@ class LandingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('PerryOps')),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Welcome to PerryOps',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'PerryOps streamlines CPC reporting and patient scheduling. '
-                  'Staff can upload reports and view clinical guidelines; patients can view their schedule.',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                Card(
-                  elevation: 0,
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        Text('Contact'),
-                        SizedBox(height: 8),
-                        Text('Email: support@perryops.example'),
-                        Text('Phone: +1-555-0100'),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: () => Navigator.pushNamed(context, '/login'),
-                  child: const Text('Get Started'),
-                ),
-              ],
+      body: PageContainer(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Icon(
+              Icons.local_hospital,
+              size: 56,
+              color: Theme.of(context).colorScheme.primary,
             ),
-          ),
+            const SizedBox(height: 12),
+            Text(
+              'Welcome to PerryOps',
+              style: Theme.of(context).textTheme.headlineMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Streamlined CPC reporting and patient scheduling.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const InfoCard(
+              title: 'For staff',
+              subtitle: 'Upload CPC reports and access clinical guidelines.',
+              icon: Icons.badge,
+            ),
+            const InfoCard(
+              title: 'For patients',
+              subtitle: 'View upcoming reminders and pre-op schedule.',
+              icon: Icons.event_available,
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () => Navigator.pushNamed(context, '/login'),
+              child: const Text('Get Started'),
+            ),
+          ],
         ),
       ),
     );

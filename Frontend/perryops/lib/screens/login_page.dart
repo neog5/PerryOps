@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
+import '../widgets/ui.dart';
 import '../models/user_type.dart';
 import '../utils/validators.dart';
+import '../services/auth_service.dart';
+import '../models/auth_response.dart';
+import '../models/home_args.dart';
+import '../services/notification_service.dart';
+import '../services/device_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -35,99 +41,165 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
     setState(() => _isSubmitting = true);
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
-    Navigator.pushReplacementNamed(context, '/home', arguments: _selectedType);
+    try {
+      final auth = const AuthService();
+      AuthResponse resp;
+      if (_selectedType == UserType.staff) {
+        resp = await auth.loginCpc(_emailCtrl.text.trim(), _passwordCtrl.text);
+      } else {
+        resp = await auth.loginPatient(
+          _emailCtrl.text.trim(),
+          _passwordCtrl.text,
+        );
+      }
+      if (!mounted) return;
+      // If patient, generate/register device token (non-blocking UX)
+      if (_selectedType == UserType.patient) {
+        try {
+          final token =
+              await const NotificationService().getOrCreateDeviceToken();
+          if (token.isNotEmpty) {
+            await const DeviceService().registerDeviceToken(resp.userId, token);
+          }
+        } catch (e) {
+          // Don't block navigation on failure; surface a lightweight notice
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not register device for notifications'),
+              ),
+            );
+          }
+        }
+      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Welcome ${resp.name}')));
+      Navigator.pushReplacementNamed(
+        context,
+        '/home',
+        arguments: HomeArgs(
+          userType: _selectedType!,
+          name: resp.name,
+          userId: resp.userId,
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Login failed')));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Login')),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 500),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Choose user type',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 12),
-                  RadioListTile<UserType>(
-                    value: UserType.staff,
-                    groupValue: _selectedType,
-                    onChanged: (v) => setState(() => _selectedType = v),
-                    title: const Text('Staff (CPC Staff)'),
-                    subtitle: const Text(
-                      'Upload CPC reports and view guidelines',
-                    ),
-                  ),
-                  RadioListTile<UserType>(
-                    value: UserType.patient,
-                    groupValue: _selectedType,
-                    onChanged: (v) => setState(() => _selectedType = v),
-                    title: const Text('Patient'),
-                    subtitle: const Text('View your schedule'),
-                  ),
-                  const SizedBox(height: 24),
-                  const Divider(height: 32),
-                  TextFormField(
-                    controller: _emailCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      hintText: 'name@example.com',
-                      prefixIcon: Icon(Icons.email),
-                    ),
-                    keyboardType: TextInputType.emailAddress,
-                    validator: Validators.email,
-                    autofillHints: const [
-                      AutofillHints.username,
-                      AutofillHints.email,
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _passwordCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscure ? Icons.visibility : Icons.visibility_off,
+      body: SingleChildScrollView(
+        child: PageContainer(
+          maxWidth: 520,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.login,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
-                        onPressed: () => setState(() => _obscure = !_obscure),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Sign in',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const SectionHeader(
+                      'Choose user type',
+                      icon: Icons.account_circle,
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<UserType>(
+                      value: _selectedType,
+                      items: const [
+                        DropdownMenuItem(
+                          value: UserType.staff,
+                          child: Text('Staff'),
+                        ),
+                        DropdownMenuItem(
+                          value: UserType.patient,
+                          child: Text('Patient'),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() => _selectedType = v),
+                      decoration: const InputDecoration(
+                        labelText: 'User type',
+                        prefixIcon: Icon(Icons.account_circle),
                       ),
                     ),
-                    obscureText: _obscure,
-                    validator: Validators.password,
-                  ),
-                  const SizedBox(height: 24),
-                  FilledButton(
-                    onPressed: _isSubmitting ? null : _submit,
-                    child:
-                        _isSubmitting
-                            ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                            : const Text('Login'),
-                  ),
-                  const SizedBox(height: 12),
-                  const Center(
-                    child: Text(
-                      'Sign up is currently disabled',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    const Divider(height: 32),
+                    TextFormField(
+                      controller: _emailCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Email',
+                        hintText: 'name@example.com',
+                        prefixIcon: Icon(Icons.email),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                      validator: Validators.email,
+                      autofillHints: const [
+                        AutofillHints.username,
+                        AutofillHints.email,
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _passwordCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: const Icon(Icons.lock),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscure ? Icons.visibility : Icons.visibility_off,
+                          ),
+                          onPressed: () => setState(() => _obscure = !_obscure),
+                        ),
+                      ),
+                      obscureText: _obscure,
+                      validator: Validators.password,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: _isSubmitting ? null : _submit,
+                      child:
+                          _isSubmitting
+                              ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : const Text('Login'),
+                    ),
+                    // Removed disabled signup note as requested
+                  ],
+                ),
               ),
             ),
           ),
