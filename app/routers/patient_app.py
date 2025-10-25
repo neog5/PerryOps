@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from app.firebase_client import get_firestore_client
 from app.schemas_firebase import (
-    Patient, PatientSchedule, Reminder, 
+    Patient, PatientSchedule, Reminder,  ApprovedReminderData, ApprovedReminderBatch,
     LoginRequest, LoginResponse, DeviceTokenRequest
 )
 from app.services.auth_service import AuthService
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/patient", tags=["patient-app"])
 
@@ -196,6 +196,100 @@ def update_device_token(patient_id: str, device_token: str):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update device token: {str(e)}")
+
+@router.post("/approved-data")
+def save_approved_data(batch: ApprovedReminderBatch):
+    try:
+        db = get_firestore_client()
+
+        saved_records = []
+
+        for data in batch.reminders:
+
+            action = data.action.lower().strip()
+            rtype = data.type.lower().strip()
+            reminder_dt = data.reminder_datetime   # always present: may be null for continue
+
+            if rtype == "medication":  # medicine REQUIRED
+                if data.medicine is None or str(data.medicine).strip() == "":
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"medicine must NOT be null for type='medication' (problem in entry with action={action})"
+                    )
+                med_value = data.medicine.strip()
+            else:  # allow null for non-medication reminders
+                med_value = data.medicine  # may be None (this is allowed)
+
+            # Case: HOLD → reminder_datetime must be present
+            if action == "hold":
+                if reminder_dt is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"reminder_datetime must NOT be null for hold action (problem with medicine={med_value})"
+                    )
+
+                # Convert to UTC aware datetime
+                try:
+                    rd = datetime.fromisoformat(reminder_dt)
+                    if rd.tzinfo is None:
+                        rd = rd.replace(tzinfo=timezone.utc)
+                    else:
+                        rd = rd.astimezone(timezone.utc)
+                except:
+                    raise HTTPException(status_code=400, detail=f"Invalid datetime format for reminder_datetime in medicine={med_value}")
+
+            # Case: CONTINUE → reminder_datetime must be null
+            elif action == "continue":
+                if reminder_dt is not None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"reminder_datetime must be null for continue action (problem with medicine={med_value})"
+                    )
+                rd = None
+
+            # Other non-medication actions (ex: fasting, bathing, substance_use)
+            else:
+                # These use the reminder_datetime normally (if present)
+                if reminder_dt is not None:
+                    try:
+                        rd = datetime.fromisoformat(reminder_dt)
+                        if rd.tzinfo is None:
+                            rd = rd.replace(tzinfo=timezone.utc)
+                        else:
+                            rd = rd.astimezone(timezone.utc)
+                    except:
+                        raise HTTPException(status_code=400, detail=f"Invalid datetime format in entry (action={action})")
+                else:
+                    rd = None
+
+            reminder_doc = {
+                "patient_id": data.patient_id,
+                "medicine": med_value,
+                "action": action,
+                "type": rtype,
+                "notes": data.notes or "",
+                "status": "pending",
+                "created_at": datetime.now(timezone.utc),
+                "reminder_datetime": rd   # may be None depending on action
+            }
+
+            # Save to Firestore
+            db.collection("reminders").add(reminder_doc)
+
+            saved_records.append(reminder_doc)
+
+        return {
+            "message": "Approved reminders saved successfully",
+            "count": len(saved_records),
+            "saved_data": saved_records
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("Error saving approved data:", e)
+        raise HTTPException(status_code=500, detail="Failed to save approved reminders")
+
 
 # Approved Data Endpoint commented  
 # @router.post("/approved-data")
