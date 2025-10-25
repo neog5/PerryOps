@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from typing import List, Dict, Any
 from app.firebase_client import get_firestore_client
-from app.schemas_workflow import (
+from app.schemas_firebase import (
     Patient, PatientCreate, CPCReport, CPCReportCreate, 
-    Recommendation, RecommendationCreate, AIRecommendationResponse,
-    ScheduleItem, ScheduleItemCreate, CPCDashboard
+    Reminder, ReminderCreate, CPCDashboard
 )
 from app.services.ai_processor import AIProcessor
 from datetime import datetime
@@ -76,9 +75,9 @@ async def upload_cpc_report(
     report_data["id"] = report_id
     return report_data
 
-@router.post("/generate-recommendations/{report_id}", response_model=Recommendation)
-def generate_recommendations(report_id: str, surgery_date: datetime, surgery_time: str):
-    """Generate AI recommendations for a CPC report"""
+@router.post("/process-report/{report_id}", response_model=List[Reminder])
+def process_cpc_report(report_id: str, surgery_date: datetime):
+    """Process CPC report and generate reminders directly"""
     db = get_firestore_client()
     ai_processor = AIProcessor()
     
@@ -89,37 +88,41 @@ def generate_recommendations(report_id: str, surgery_date: datetime, surgery_tim
     
     report_data = report_doc.to_dict()
     
-    # Create surgery record
-    surgery_data = {
-        "patient_id": report_data["patient_id"],
-        "surgery_date": surgery_date,
-        "surgery_time": surgery_time,
-        "created_at": datetime.now()
-    }
-    
-    surgery_doc_ref = db.collection("surgeries").add(surgery_data)
-    surgery_id = surgery_doc_ref[1].id
-    
     # Generate AI recommendations
     ai_response = ai_processor.generate_recommendations({
         "patient_id": report_data["patient_id"],
         "surgery_date": surgery_date.isoformat(),
-        "surgery_time": surgery_time,
         "cpc_data": "processed_cpc_data"  # In real implementation, parse the uploaded file
     })
     
-    # Create recommendation record
-    recommendation_data = {
-        "patient_id": report_data["patient_id"],
-        "cpc_report_id": report_id,
-        "surgery_id": surgery_id,
-        "ai_response": ai_response,
-        "status": "pending",
-        "created_at": datetime.now()
-    }
-    
-    doc_ref = db.collection("recommendations").add(recommendation_data)
-    recommendation_id = doc_ref[1].id
+    # Create reminders directly from AI response
+    reminders_created = []
+    for item in ai_response["recommendations"]:
+        # Calculate scheduled date
+        from datetime import timedelta
+        scheduled_date = surgery_date
+        if item.get("days_before_surgery"):
+            scheduled_date = surgery_date - timedelta(days=item["days_before_surgery"])
+        elif item.get("hours_before_surgery"):
+            scheduled_date = surgery_date - timedelta(hours=item["hours_before_surgery"])
+        
+        reminder_data = {
+            "patient_id": report_data["patient_id"],
+            "medicine": item.get("medication_name"),
+            "action": item["action"],
+            "scheduled_date": scheduled_date,
+            "scheduled_time": item.get("specific_time", "08:00"),
+            "status": "pending",
+            "created_at": datetime.now()
+        }
+        
+        doc_ref = db.collection("reminders").add(reminder_data)
+        reminder_id = doc_ref[1].id
+        
+        reminder_doc = db.collection("reminders").document(reminder_id).get()
+        reminder_data = reminder_doc.to_dict()
+        reminder_data["id"] = reminder_id
+        reminders_created.append(reminder_data)
     
     # Mark report as processed
     db.collection("cpc_reports").document(report_id).update({
@@ -127,100 +130,22 @@ def generate_recommendations(report_id: str, surgery_date: datetime, surgery_tim
         "processed_at": datetime.now()
     })
     
-    recommendation_doc = db.collection("recommendations").document(recommendation_id).get()
-    rec_data = recommendation_doc.to_dict()
-    rec_data["id"] = recommendation_id
-    return rec_data
+    return reminders_created
 
-@router.get("/pending-recommendations", response_model=List[Recommendation])
-def get_pending_recommendations():
-    """Get all pending recommendations for CPC staff review"""
+@router.get("/reports", response_model=List[CPCReport])
+def get_cpc_reports():
+    """Get all CPC reports"""
     db = get_firestore_client()
     
-    recommendations = []
-    docs = db.collection("recommendations").where("status", "==", "pending").stream()
+    reports = []
+    docs = db.collection("cpc_reports").order_by("uploaded_at", direction="DESCENDING").stream()
     
     for doc in docs:
-        rec_data = doc.to_dict()
-        rec_data["id"] = doc.id
-        recommendations.append(rec_data)
+        report_data = doc.to_dict()
+        report_data["id"] = doc.id
+        reports.append(report_data)
     
-    return recommendations
-
-@router.post("/approve-recommendation/{recommendation_id}")
-def approve_recommendation(recommendation_id: str, approved_by: str):
-    """Approve a recommendation and create schedule items"""
-    db = get_firestore_client()
-    
-    # Get the recommendation
-    rec_doc = db.collection("recommendations").document(recommendation_id).get()
-    if not rec_doc.exists:
-        raise HTTPException(status_code=404, detail="Recommendation not found")
-    
-    recommendation = rec_doc.to_dict()
-    
-    # Update recommendation status
-    db.collection("recommendations").document(recommendation_id).update({
-        "status": "approved",
-        "approved_by": approved_by,
-        "approved_at": datetime.now()
-    })
-    
-    # Create schedule items for each recommendation
-    schedule_items_created = 0
-    ai_response = recommendation["ai_response"]
-    surgery_date = ai_response["surgery_date"]
-    
-    for item in ai_response["recommendations"]:
-        # Calculate scheduled date and time
-        scheduled_date = surgery_date
-        if item.get("days_before_surgery"):
-            from datetime import timedelta
-            scheduled_date = surgery_date - timedelta(days=item["days_before_surgery"])
-        elif item.get("hours_before_surgery"):
-            from datetime import timedelta
-            scheduled_date = surgery_date - timedelta(hours=item["hours_before_surgery"])
-        
-        schedule_item_data = {
-            "patient_id": recommendation["patient_id"],
-            "recommendation_id": recommendation_id,
-            "type": item["type"],
-            "medication_name": item.get("medication_name"),
-            "action": item["action"],
-            "scheduled_date": scheduled_date,
-            "scheduled_time": item.get("specific_time", "08:00"),
-            "instructions": item["instructions"],
-            "priority": item.get("priority", 1),
-            "notification_sent": False,
-            "patient_completed": False,
-            "created_at": datetime.now()
-        }
-        
-        db.collection("schedule_items").add(schedule_item_data)
-        schedule_items_created += 1
-    
-    return {
-        "status": "approved",
-        "schedule_items_created": schedule_items_created,
-        "message": f"Recommendation approved and {schedule_items_created} schedule items created"
-    }
-
-@router.post("/reject-recommendation/{recommendation_id}")
-def reject_recommendation(recommendation_id: str, rejected_by: str):
-    """Reject a recommendation"""
-    db = get_firestore_client()
-    
-    rec_doc = db.collection("recommendations").document(recommendation_id).get()
-    if not rec_doc.exists:
-        raise HTTPException(status_code=404, detail="Recommendation not found")
-    
-    db.collection("recommendations").document(recommendation_id).update({
-        "status": "rejected",
-        "rejected_by": rejected_by,
-        "rejected_at": datetime.now()
-    })
-    
-    return {"status": "rejected", "message": "Recommendation rejected"}
+    return reports
 
 @router.get("/dashboard", response_model=CPCDashboard)
 def get_cpc_dashboard():
@@ -229,25 +154,15 @@ def get_cpc_dashboard():
     
     # Get counts
     patients_count = len(list(db.collection("patients").stream()))
-    pending_count = len(list(db.collection("recommendations").where("status", "==", "pending").stream()))
-    approved_count = len(list(db.collection("recommendations").where("status", "==", "approved").stream()))
-    rejected_count = len(list(db.collection("recommendations").where("status", "==", "rejected").stream()))
-    
-    # Get recent uploads
-    recent_uploads = []
-    docs = db.collection("cpc_reports").order_by("uploaded_at", direction="DESCENDING").limit(5).stream()
-    
-    for doc in docs:
-        upload_data = doc.to_dict()
-        upload_data["id"] = doc.id
-        recent_uploads.append(upload_data)
+    pending_reports = len(list(db.collection("cpc_reports").where("is_processed", "==", False).stream()))
+    processed_reports = len(list(db.collection("cpc_reports").where("is_processed", "==", True).stream()))
+    total_reminders = len(list(db.collection("reminders").stream()))
     
     return CPCDashboard(
         total_patients=patients_count,
-        pending_recommendations=pending_count,
-        approved_recommendations=approved_count,
-        rejected_recommendations=rejected_count,
-        recent_uploads=recent_uploads
+        pending_reports=pending_reports,
+        processed_reports=processed_reports,
+        total_reminders=total_reminders
     )
 
 @router.get("/patients/optimization-status")

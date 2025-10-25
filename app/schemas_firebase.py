@@ -4,14 +4,8 @@ from datetime import datetime
 from enum import Enum
 
 class UserRole(str, Enum):
-    PATIENT = "patient"
     CPC_STAFF = "cpc_staff"
-    ADMIN = "admin"
-
-class RecommendationStatus(str, Enum):
-    PENDING_APPROVAL = "pending_approval"
-    APPROVED = "approved"
-    REJECTED = "rejected"
+    PATIENT = "patient"
 
 class ReminderStatus(str, Enum):
     PENDING = "pending"
@@ -24,10 +18,7 @@ class UserBase(BaseModel):
     email: EmailStr
     name: str
     role: UserRole
-    device_token: Optional[str] = None  # For push notifications
-
-class UserCreate(UserBase):
-    password: str
+    device_token: Optional[str] = None
 
 class User(UserBase):
     id: str
@@ -39,8 +30,10 @@ class User(UserBase):
 # Patient Schemas
 class PatientBase(BaseModel):
     user_id: str
+    name: str
+    email: EmailStr
+    phone: Optional[str] = None
     condition: Optional[str] = None
-    notes: Optional[str] = None
 
 class PatientCreate(PatientBase):
     pass
@@ -52,75 +45,62 @@ class Patient(PatientBase):
     class Config:
         from_attributes = True
 
-# Surgery Schemas
-class SurgeryBase(BaseModel):
+# CPC Report Schema
+class CPCReportBase(BaseModel):
     patient_id: str
-    surgery_date: datetime
-    surgery_type: Optional[str] = None
-    surgeon_name: Optional[str] = None
-    hospital_name: Optional[str] = None
+    uploaded_by: str
+    original_filename: str
+    file_path: Optional[str] = None
 
-class SurgeryCreate(SurgeryBase):
+class CPCReportCreate(CPCReportBase):
     pass
 
-class Surgery(SurgeryBase):
+class CPCReport(CPCReportBase):
     id: str
-    created_at: datetime
+    uploaded_at: datetime
+    processed_at: Optional[datetime] = None
+    is_processed: bool = False
     
     class Config:
         from_attributes = True
 
-# Model Recommendation Schemas
-class ModelRecommendationBase(BaseModel):
-    patient_id: str
-    condition: str
-    data: Dict[str, Any]  # JSON data from AI model
-
-class ModelRecommendationCreate(ModelRecommendationBase):
-    pass
-
-class ModelRecommendation(ModelRecommendationBase):
-    id: str
-    status: RecommendationStatus
-    approved_by: Optional[str] = None
-    approved_at: Optional[datetime] = None
-    created_at: datetime
-    
-    class Config:
-        from_attributes = True
-
-# Reminder Schemas
+# Reminder Schema (Main model - populated directly from AI)
 class ReminderBase(BaseModel):
     patient_id: str
-    medicine: str
-    dosage: str
-    time: str  # HH:MM format
-    date: Optional[datetime] = None
+    medicine: Optional[str] = None
+    action: str  # "hold", "continue", "start_fasting", etc.
+    scheduled_date: datetime
+    scheduled_time: str  # HH:MM format
 
 class ReminderCreate(ReminderBase):
     pass
 
 class Reminder(ReminderBase):
     id: str
-    sent: bool
-    status: ReminderStatus
+    status: ReminderStatus = ReminderStatus.PENDING
+    completed_at: Optional[datetime] = None
     created_at: datetime
     
     class Config:
         from_attributes = True
 
-# Response Schemas
+# Patient Schedule View
 class PatientSchedule(BaseModel):
     patient_id: str
-    reminders: List[Reminder]
     surgery_date: Optional[datetime] = None
+    reminders: List[Reminder]
+    total_reminders: int
+    completed_reminders: int
     is_optimized: bool
 
-class ApprovalResponse(BaseModel):
-    status: str
-    created_reminders: int
-    message: str
+# CPC Dashboard
+class CPCDashboard(BaseModel):
+    total_patients: int
+    pending_reports: int
+    processed_reports: int
+    total_reminders: int
 
+# Notification Request
 class NotificationRequest(BaseModel):
     patient_id: str
     title: str
