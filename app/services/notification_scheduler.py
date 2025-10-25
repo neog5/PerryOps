@@ -1,168 +1,157 @@
-from typing import List, Dict, Any
-from datetime import datetime, timedelta
-from app.firebase_client import get_firestore_client, send_push_notification
+#!/usr/bin/env python3
+"""
+Notification Scheduler for PerryOps
+Handles both single-time and recurring reminders
+"""
+
+import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
+from typing import List, Dict, Any
+from app.firebase_client import get_firestore_client
+from app.services.notification_service import NotificationService
+
+logger = logging.getLogger(__name__)
 
 class NotificationScheduler:
-    """
-    Service for scheduling and sending push notifications to patients
-    """
-    
     def __init__(self):
         self.db = get_firestore_client()
+        self.notification_service = NotificationService()
+        self.running = False
+        
+    async def start_scheduler(self):
+        """Start the notification scheduler"""
+        self.running = True
+        logger.info("🚀 Notification scheduler started")
+        
+        while self.running:
+            try:
+                await self.check_and_send_notifications()
+                # Check every 5 minutes
+                await asyncio.sleep(300)
+            except Exception as e:
+                logger.error(f"Error in scheduler: {e}")
+                await asyncio.sleep(60)
     
-    def schedule_notifications_for_approved_recommendation(self, recommendation_id: str):
-        """
-        Schedule notifications for all schedule items in an approved recommendation
-        """
-        # Get all schedule items for this recommendation
-        items_docs = self.db.collection("schedule_items").where("recommendation_id", "==", recommendation_id).stream()
-        
-        scheduled_notifications = []
-        
-        for doc in items_docs:
-            item_data = doc.to_dict()
-            item_data["id"] = doc.id
-            
-            # Calculate notification time (1 hour before scheduled time)
-            scheduled_datetime = item_data["scheduled_date"]
-            if isinstance(scheduled_datetime, str):
-                scheduled_datetime = datetime.fromisoformat(scheduled_datetime)
-            
-            notification_time = scheduled_datetime - timedelta(hours=1)
-            
-            # Create notification record
-            notification_data = {
-                "patient_id": item_data["patient_id"],
-                "schedule_item_id": doc.id,
-                "title": "Preoperative Reminder",
-                "body": item_data["instructions"],
-                "scheduled_time": notification_time,
-                "sent": False,
-                "created_at": datetime.now()
-            }
-            
-            # Store notification
-            notif_doc_ref = self.db.collection("scheduled_notifications").add(notification_data)
-            scheduled_notifications.append(notif_doc_ref[1].id)
-        
-        return scheduled_notifications
+    def stop_scheduler(self):
+        """Stop the notification scheduler"""
+        self.running = False
+        logger.info("🛑 Notification scheduler stopped")
     
-    def send_due_notifications(self):
-        """
-        Send notifications that are due now
-        """
-        now = datetime.now()
-        
-        # Get due notifications
-        due_notifications = self.db.collection("scheduled_notifications").where("scheduled_time", "<=", now).where("sent", "==", False).stream()
-        
-        sent_count = 0
-        failed_count = 0
-        
-        for notif_doc in due_notifications:
-            notif_data = notif_doc.to_dict()
+    async def check_and_send_notifications(self):
+        """Check for due notifications and send them"""
+        try:
+            now = datetime.utcnow()
+            logger.info(f"🔍 Checking notifications at {now}")
             
-            # Get patient's device token
-            patient_doc = self.db.collection("patients").document(notif_data["patient_id"]).get()
-            if not patient_doc.exists:
-                logging.error(f"Patient {notif_data['patient_id']} not found")
-                failed_count += 1
-                continue
+            # Get all pending reminders
+            reminders = self.get_pending_reminders()
             
-            patient_data = patient_doc.to_dict()
-            device_token = patient_data.get("device_token")
+            for reminder in reminders:
+                await self.process_reminder(reminder, now)
+                
+        except Exception as e:
+            logger.error(f"Error checking notifications: {e}")
+    
+    def get_pending_reminders(self) -> List[Dict[str, Any]]:
+        """Get all pending reminders from database"""
+        try:
+            reminders = []
+            docs = self.db.collection("reminders").where("status", "==", "pending").stream()
             
-            if not device_token:
-                logging.error(f"Device token not found for patient {notif_data['patient_id']}")
-                failed_count += 1
-                continue
+            for doc in docs:
+                reminder_data = doc.to_dict()
+                reminder_data["id"] = doc.id
+                reminders.append(reminder_data)
             
-            # Send notification
-            result = send_push_notification(
-                device_token=device_token,
-                title=notif_data["title"],
-                body=notif_data["body"],
-                data={"schedule_item_id": notif_data["schedule_item_id"]}
-            )
+            logger.info(f"📋 Found {len(reminders)} pending reminders")
+            return reminders
             
-            if result["success"]:
-                # Mark notification as sent
-                self.db.collection("scheduled_notifications").document(notif_doc.id).update({
-                    "sent": True,
-                    "sent_at": datetime.now(),
-                    "message_id": result["message_id"]
-                })
-                sent_count += 1
+        except Exception as e:
+            logger.error(f"Error getting reminders: {e}")
+            return []
+    
+    async def process_reminder(self, reminder: Dict[str, Any], current_time: datetime):
+        """Process a single reminder and send notifications if due"""
+        try:
+            reminder_id = reminder["id"]
+            action = reminder.get("action", "")
+            patient_id = reminder.get("patient_id")
+            
+            # Case 1: Continue medications - send immediately (reminder_datetime is null)
+            # But only if it hasn't been sent yet (no sent_at timestamp)
+            if action == "continue" and not reminder.get("reminder_datetime") and not reminder.get("sent_at"):
+                logger.info(f"⏰ Sending continue reminder for patient {patient_id}: {reminder['medicine']} - {reminder['action']}")
+                await self.send_reminder_notification(reminder)
+            
+            # Case 2: Hold/other reminders - send at scheduled time
+            elif reminder.get("reminder_datetime"):
+                reminder_datetime_str = reminder.get("reminder_datetime")
+                if isinstance(reminder_datetime_str, str):
+                    # Parse as UTC datetime
+                    reminder_datetime = datetime.fromisoformat(reminder_datetime_str.replace('Z', '+00:00'))
+                else:
+                    reminder_datetime = reminder_datetime_str
+                
+                # Ensure both datetimes are timezone-aware for comparison
+                if reminder_datetime.tzinfo is None:
+                    reminder_datetime = reminder_datetime.replace(tzinfo=timezone.utc)
+                if current_time.tzinfo is None:
+                    current_time = current_time.replace(tzinfo=timezone.utc)
+                
+                # Check if it's time to send (within 4 minute tolerance)
+                time_diff = (reminder_datetime - current_time).total_seconds()
+                
+                if 0 <= time_diff <= 240:  # Due within 4 minutes
+                    logger.info(f"⏰ Sending scheduled reminder for patient {patient_id}: {reminder['medicine']} - {reminder['action']}")
+                    await self.send_reminder_notification(reminder)
+                        
+        except Exception as e:
+            logger.error(f"Error processing reminder {reminder.get('id', 'unknown')}: {e}")
+    
+    async def send_reminder_notification(self, reminder: Dict[str, Any], schedule_time: datetime = None):
+        """Send notification for a reminder"""
+        try:
+            reminder_id = reminder["id"]
+            patient_id = reminder["patient_id"]
+            
+            # Use the notification service to send the reminder
+            result = self.notification_service.send_reminder(reminder_id)
+            
+            if result.get("success"):
+                logger.info(f"✅ Notification sent successfully for reminder {reminder_id}")
+                
+                # Update reminder status
+                self.update_reminder_status(reminder_id, "sent", schedule_time)
             else:
-                logging.error(f"Failed to send notification: {result['error']}")
-                failed_count += 1
-        
-        return {
-            "sent": sent_count,
-            "failed": failed_count,
-            "total_processed": sent_count + failed_count
-        }
+                logger.error(f"❌ Failed to send notification: {result.get('error')}")
+                
+        except Exception as e:
+            logger.error(f"Error sending reminder notification: {e}")
     
-    def get_patient_notifications(self, patient_id: str) -> List[Dict[str, Any]]:
-        """
-        Get all notifications for a patient
-        """
-        notifications = []
-        docs = self.db.collection("scheduled_notifications").where("patient_id", "==", patient_id).order_by("scheduled_time").stream()
-        
-        for doc in docs:
-            notif_data = doc.to_dict()
-            notif_data["id"] = doc.id
-            notifications.append(notif_data)
-        
-        return notifications
-    
-    def mark_notification_sent(self, notification_id: str):
-        """
-        Mark a notification as sent
-        """
-        self.db.collection("scheduled_notifications").document(notification_id).update({
-            "sent": True,
-            "sent_at": datetime.now()
-        })
-    
-    def create_immediate_notification(self, patient_id: str, title: str, body: str, data: Dict[str, str] = None):
-        """
-        Create and send an immediate notification
-        """
-        # Get patient's device token
-        patient_doc = self.db.collection("patients").document(patient_id).get()
-        if not patient_doc.exists:
-            return {"success": False, "error": "Patient not found"}
-        
-        patient_data = patient_doc.to_dict()
-        device_token = patient_data.get("device_token")
-        
-        if not device_token:
-            return {"success": False, "error": "Device token not found"}
-        
-        # Send notification
-        result = send_push_notification(
-            device_token=device_token,
-            title=title,
-            body=body,
-            data=data or {}
-        )
-        
-        if result["success"]:
-            # Store notification record
-            notification_data = {
-                "patient_id": patient_id,
-                "title": title,
-                "body": body,
-                "scheduled_time": datetime.now(),
-                "sent": True,
-                "sent_at": datetime.now(),
-                "message_id": result["message_id"],
-                "created_at": datetime.now()
+    def update_reminder_status(self, reminder_id: str, status: str, schedule_time: datetime = None):
+        """Update reminder status in database"""
+        try:
+            update_data = {
+                "status": status,
+                "sent_at": datetime.utcnow()
             }
             
-            self.db.collection("scheduled_notifications").add(notification_data)
-        
-        return result
+            if schedule_time:
+                update_data["last_sent_schedule"] = schedule_time.isoformat()
+            
+            self.db.collection("reminders").document(reminder_id).update(update_data)
+            logger.info(f"📝 Updated reminder {reminder_id} status to {status}")
+            
+        except Exception as e:
+            logger.error(f"Error updating reminder status: {e}")
+# Global scheduler instance
+scheduler = NotificationScheduler()
+
+async def start_notification_scheduler():
+    """Start the notification scheduler"""
+    await scheduler.start_scheduler()
+
+def stop_notification_scheduler():
+    """Stop the notification scheduler"""
+    scheduler.stop_scheduler()

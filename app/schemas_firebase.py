@@ -115,6 +115,9 @@ class NotificationRequest(BaseModel):
     body: str
     data: Optional[Dict[str, str]] = None
 
+class DeviceTokenRequest(BaseModel):
+    device_token: str
+
 # Authentication Schemas
 class LoginRequest(BaseModel):
     email: EmailStr
