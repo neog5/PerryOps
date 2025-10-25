@@ -5,7 +5,7 @@ import logging
 
 class TaskPriorityService:
     """
-    Service for managing task priorities based on time and medication importance
+    Service for managing task priorities based purely on time before surgery
     """
     
     def __init__(self):
@@ -13,8 +13,8 @@ class TaskPriorityService:
     
     def calculate_task_priority(self, schedule_item: Dict[str, Any]) -> int:
         """
-        Calculate priority score for a schedule item
-        Higher score = higher priority
+        Calculate priority score for a schedule item based on time before surgery
+        Higher score = higher priority (tasks further from surgery = higher priority)
         """
         now = datetime.now()
         scheduled_time = schedule_item.get("scheduled_date")
@@ -22,53 +22,52 @@ class TaskPriorityService:
         if isinstance(scheduled_time, str):
             scheduled_time = datetime.fromisoformat(scheduled_time)
         
-        # Time-based priority (closer to now = higher priority)
+        # Get surgery date for this patient
+        patient_id = schedule_item.get("patient_id")
+        surgery_date = self._get_surgery_date(patient_id)
+        
+        if not surgery_date:
+            # If no surgery date, use current time as reference
+            surgery_date = now
+        
+        # Calculate days before surgery
+        days_before_surgery = (surgery_date - scheduled_time).days
+        
+        # Priority: More days before surgery = higher priority
+        # This ensures medications that need to be held 5 days before surgery
+        # appear higher than those that need to be held 3 days before surgery
+        priority_score = days_before_surgery * 100
+        
+        # Add time-based urgency (tasks due soon get slight boost)
         time_diff = (scheduled_time - now).total_seconds() / 3600  # hours
         
-        # Medication type priority
-        medication_priority = self._get_medication_priority(schedule_item)
-        
-        # Calculate final priority score
         if time_diff <= 0:  # Overdue
-            priority_score = 1000 + medication_priority
+            priority_score += 1000
         elif time_diff <= 2:  # Due within 2 hours
-            priority_score = 500 + medication_priority
+            priority_score += 500
         elif time_diff <= 24:  # Due within 24 hours
-            priority_score = 200 + medication_priority
-        elif time_diff <= 72:  # Due within 3 days
-            priority_score = 100 + medication_priority
-        else:
-            priority_score = 50 + medication_priority
+            priority_score += 200
         
         return int(priority_score)
     
-    def _get_medication_priority(self, schedule_item: Dict[str, Any]) -> int:
+    def _get_surgery_date(self, patient_id: str) -> datetime:
         """
-        Get priority based on medication type and action
+        Get surgery date for a patient
         """
-        medication_name = schedule_item.get("medication_name", "").lower()
-        action = schedule_item.get("action", "").lower()
-        item_type = schedule_item.get("type", "").lower()
+        try:
+            surgery_docs = self.db.collection("surgeries").where("patient_id", "==", patient_id).order_by("surgery_date", direction="DESCENDING").limit(1).stream()
+            
+            for doc in surgery_docs:
+                surgery_data = doc.to_dict()
+                surgery_date = surgery_data.get("surgery_date")
+                
+                if isinstance(surgery_date, str):
+                    return datetime.fromisoformat(surgery_date)
+                return surgery_date
+        except Exception as e:
+            logging.error(f"Error getting surgery date for patient {patient_id}: {e}")
         
-        # Critical medications that must be held
-        critical_medications = ["warfarin", "aspirin", "clopidogrel", "heparin"]
-        if any(med in medication_name for med in critical_medications):
-            return 100
-        
-        # Fasting is critical
-        if item_type == "fasting":
-            return 90
-        
-        # Medication holds are high priority
-        if action == "hold":
-            return 80
-        
-        # Medication continues are medium priority
-        if action == "continue":
-            return 60
-        
-        # Other preparations are lower priority
-        return 40
+        return None
     
     def get_priority_tasks(self, patient_id: str) -> List[Dict[str, Any]]:
         """
@@ -78,6 +77,8 @@ class TaskPriorityService:
         items_docs = self.db.collection("schedule_items").where("patient_id", "==", patient_id).stream()
         
         tasks = []
+        surgery_date = self._get_surgery_date(patient_id)
+        
         for doc in items_docs:
             item_data = doc.to_dict()
             item_data["id"] = doc.id
@@ -94,9 +95,17 @@ class TaskPriorityService:
             time_until_due = (scheduled_time - datetime.now()).total_seconds() / 3600
             item_data["hours_until_due"] = round(time_until_due, 1)
             
+            # Add days before surgery
+            if surgery_date:
+                days_before_surgery = (surgery_date - scheduled_time).days
+                item_data["days_before_surgery"] = days_before_surgery
+            else:
+                item_data["days_before_surgery"] = None
+            
             tasks.append(item_data)
         
         # Sort by priority score (highest first)
+        # This will show tasks that need to be done further from surgery first
         tasks.sort(key=lambda x: x["priority_score"], reverse=True)
         
         return tasks

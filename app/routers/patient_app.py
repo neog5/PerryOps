@@ -67,15 +67,26 @@ def complete_reminder(patient_id: str, reminder_id: str):
 
 @router.get("/{patient_id}/priority-tasks")
 def get_priority_tasks(patient_id: str):
-    """Get tasks ordered by priority for the patient"""
+    """Get tasks ordered by priority for the patient based on time before surgery"""
     priority_service = TaskPriorityService()
     tasks = priority_service.get_priority_tasks(patient_id)
+    
+    # Group tasks by days before surgery for better organization
+    tasks_by_days = {}
+    for task in tasks:
+        days_before = task.get("days_before_surgery")
+        if days_before is not None:
+            if days_before not in tasks_by_days:
+                tasks_by_days[days_before] = []
+            tasks_by_days[days_before].append(task)
     
     return {
         "patient_id": patient_id,
         "tasks": tasks,
+        "tasks_by_days_before_surgery": tasks_by_days,
         "total_tasks": len(tasks),
-        "urgent_tasks": len([t for t in tasks if t.get("hours_until_due", 0) <= 24])
+        "urgent_tasks": len([t for t in tasks if t.get("hours_until_due", 0) <= 24]),
+        "explanation": "Tasks are ordered by days before surgery. Medications that need to be held 5 days before surgery will appear higher than those that need to be held 3 days before surgery."
     }
 
 @router.get("/{patient_id}/urgent-tasks")
