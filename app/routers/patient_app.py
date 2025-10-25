@@ -96,12 +96,15 @@ def get_upcoming_reminders(patient_id: str, hours_ahead: int = 24):
         reminder_data = doc.to_dict()
         reminder_data["id"] = doc.id
         
-        # Check if reminder is upcoming
-        scheduled_datetime = reminder_data["scheduled_date"]
-        if isinstance(scheduled_datetime, str):
-            scheduled_datetime = datetime.fromisoformat(scheduled_datetime)
+        # Check if reminder is upcoming using reminder_datetime
+        reminder_datetime = reminder_data.get("reminder_datetime")
+        if isinstance(reminder_datetime, str):
+            reminder_datetime = datetime.fromisoformat(reminder_datetime)
         
-        if now <= scheduled_datetime <= future_time and reminder_data.get("status") == "pending":
+        # Only include pending reminders that are within the time window
+        if (reminder_datetime and 
+            now <= reminder_datetime <= future_time and 
+            reminder_data.get("status") == "pending"):
             upcoming_reminders.append(reminder_data)
     
     return {

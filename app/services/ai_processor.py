@@ -46,35 +46,64 @@ class AIProcessor:
         Simulate AI agent response based on common preoperative scenarios
         """
         recommendations = []
+        surgery_date_str = patient_data.get("surgery_date")
+        surgery_date = datetime.fromisoformat(surgery_date_str) if surgery_date_str else datetime.now()
         
-        # Simulate common medications that need to be held
-        common_medications = [
-            {"name": "Warfarin", "hold_days": 5, "reason": "Blood thinner - risk of bleeding"},
-            {"name": "Aspirin", "hold_days": 7, "reason": "Blood thinner - risk of bleeding"},
-            {"name": "Metformin", "hold_days": 2, "reason": "Diabetes medication - risk of lactic acidosis"},
-            {"name": "ACE Inhibitors", "hold_days": 1, "reason": "Blood pressure medication - risk of hypotension"}
+        # Medication reminders (hold)
+        medication_hold = [
+            {"name": "Warfarin", "hold_days": 5},
+            {"name": "Aspirin", "hold_days": 7},
+            {"name": "Metformin", "hold_days": 2},
         ]
-        
-        # Add medication hold recommendations
-        for med in common_medications:
+
+        for med in medication_hold:
+            reminder_datetime = surgery_date - timedelta(days=med["hold_days"])
+            reminder_datetime = reminder_datetime.replace(hour=8, minute=0, second=0, microsecond=0)
             recommendations.append({
-                "type": "medication_hold",
-                "medication_name": med["name"],
+                "type": "medication",
+                "medicine": med["name"],
                 "action": "hold",
-                "days_before_surgery": med["hold_days"],
-                "instructions": f"Hold {med['name']} {med['hold_days']} days before surgery. {med['reason']}",
-                "priority": 1
+                "reminder_datetime": reminder_datetime
             })
-        
-        # Add fasting recommendation
+
+        # Medication reminders (continue)
+        medication_continue = [
+            {"name": "Beta Blockers"},
+            {"name": "ACE Inhibitors"},
+        ]
+        for med in medication_continue:
+            recommendations.append({
+                "type": "medication",
+                "medicine": med["name"],
+                "action": "continue",
+                "reminder_datetime": None
+            })
+
+        # Fasting reminder
+        fasting_start = surgery_date - timedelta(hours=8)
         recommendations.append({
             "type": "fasting",
-            "medication_name": None,
+            "medicine": None,
             "action": "start_fasting",
-            "hours_before_surgery": 8,
-            "specific_time": "00:00",
-            "instructions": "Start fasting 8 hours before surgery. No food or drink after midnight.",
-            "priority": 1
+            "reminder_datetime": fasting_start
+        })
+
+        # Bathing reminder
+        bathing_time = surgery_date - timedelta(hours=12)
+        recommendations.append({
+            "type": "bathing",
+            "medicine": None,
+            "action": "special_bath",
+            "reminder_datetime": bathing_time
+        })
+
+        # Substance use reminder
+        substance_time = surgery_date - timedelta(days=1)
+        recommendations.append({
+            "type": "substance_use",
+            "medicine": None,
+            "action": "avoid_alcohol",
+            "reminder_datetime": substance_time
         })
         
         # Add pre-surgery preparation

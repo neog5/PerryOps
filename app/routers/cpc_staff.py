@@ -113,21 +113,13 @@ def process_cpc_report(report_id: str, surgery_date: datetime):
     
     # Create reminders directly from AI response
     reminders_created = []
-    for item in ai_response["recommendations"]:
-        # Calculate scheduled date
-        from datetime import timedelta
-        scheduled_date = surgery_date
-        if item.get("days_before_surgery"):
-            scheduled_date = surgery_date - timedelta(days=item["days_before_surgery"])
-        elif item.get("hours_before_surgery"):
-            scheduled_date = surgery_date - timedelta(hours=item["hours_before_surgery"])
-        
+    for item in ai_response:
         reminder_data = {
             "patient_id": report_data["patient_id"],
-            "medicine": item.get("medication_name"),
+            "type": item["type"],
+            "medicine": item.get("medicine"),
             "action": item["action"],
-            "scheduled_date": scheduled_date,
-            "scheduled_time": item.get("specific_time", "08:00"),
+            "reminder_datetime": item.get("reminder_datetime"),
             "status": "pending",
             "created_at": datetime.now()
         }

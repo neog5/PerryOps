@@ -64,13 +64,20 @@ class CPCReport(CPCReportBase):
     class Config:
         from_attributes = True
 
+# Reminder Types
+class ReminderType(str, Enum):
+    MEDICATION = "medication"
+    FASTING = "fasting"
+    BATHING = "bathing"
+    SUBSTANCE_USE = "substance_use"
+
 # Reminder Schema (Main model - populated directly from AI)
 class ReminderBase(BaseModel):
     patient_id: str
-    medicine: Optional[str] = None
+    type: ReminderType
+    medicine: Optional[str] = None  # For medication type
     action: str  # "hold", "continue", "start_fasting", etc.
-    scheduled_date: datetime
-    scheduled_time: str  # HH:MM format
+    reminder_datetime: Optional[datetime] = None  # Specific datetime for hold actions, null for continue
 
 class ReminderCreate(ReminderBase):
     pass
