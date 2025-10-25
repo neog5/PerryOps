@@ -105,46 +105,156 @@ def complete_reminder(patient_id: str, reminder_id: str):
 
 @router.get("/{patient_id}/upcoming-reminders")
 def get_upcoming_reminders(patient_id: str, hours_ahead: int = 24):
-    """Get upcoming reminders for the next N hours"""
-    db = get_firestore_client()
-    
-    now = datetime.now()
-    future_time = now + timedelta(hours=hours_ahead)
-    
-    # Get upcoming reminders
-    upcoming_reminders = []
-    docs = db.collection("reminders").where("patient_id", "==", patient_id).stream()
-    
-    for doc in docs:
-        reminder_data = doc.to_dict()
-        reminder_data["id"] = doc.id
+    """Get upcoming reminders for the next N hours with scheduling logic"""
+    try:
+        db = get_firestore_client()
         
-        # Convert Firestore datetime objects to Python datetime
-        if reminder_data.get("reminder_datetime") and hasattr(reminder_data["reminder_datetime"], 'timestamp'):
-            reminder_data["reminder_datetime"] = datetime.fromtimestamp(reminder_data["reminder_datetime"].timestamp())
+        now = datetime.now()
+        future_time = now + timedelta(hours=hours_ahead)
         
-        if reminder_data.get("created_at") and hasattr(reminder_data["created_at"], 'timestamp'):
-            reminder_data["created_at"] = datetime.fromtimestamp(reminder_data["created_at"].timestamp())
+        # Get surgery date for this patient
+        surgery_date = None
+        try:
+            surgery_docs = db.collection("surgeries").where("patient_id", "==", patient_id).order_by("surgery_date", direction="DESCENDING").limit(1).stream()
+            for doc in surgery_docs:
+                surgery_data = doc.to_dict()
+                surgery_date = surgery_data.get("surgery_date")
+                if isinstance(surgery_date, str):
+                    surgery_date = datetime.fromisoformat(surgery_date)
+                break
+        except Exception as e:
+            print(f"Error getting surgery date: {e}")
+            surgery_date = None
         
-        if reminder_data.get("completed_at") and hasattr(reminder_data["completed_at"], 'timestamp'):
-            reminder_data["completed_at"] = datetime.fromtimestamp(reminder_data["completed_at"].timestamp())
+        # Get all reminders for this patient
+        all_reminders = []
+        try:
+            docs = db.collection("reminders").where("patient_id", "==", patient_id).stream()
+            
+            for doc in docs:
+                reminder_data = doc.to_dict()
+                reminder_data["id"] = doc.id
+                
+                # Convert Firestore datetime objects to Python datetime
+                try:
+                    if reminder_data.get("reminder_datetime"):
+                        if hasattr(reminder_data["reminder_datetime"], 'timestamp'):
+                            reminder_data["reminder_datetime"] = datetime.fromtimestamp(reminder_data["reminder_datetime"].timestamp())
+                        elif isinstance(reminder_data["reminder_datetime"], str):
+                            reminder_data["reminder_datetime"] = datetime.fromisoformat(reminder_data["reminder_datetime"])
+                    
+                    if reminder_data.get("created_at") and hasattr(reminder_data["created_at"], 'timestamp'):
+                        reminder_data["created_at"] = datetime.fromtimestamp(reminder_data["created_at"].timestamp())
+                    
+                    if reminder_data.get("completed_at") and hasattr(reminder_data["completed_at"], 'timestamp'):
+                        reminder_data["completed_at"] = datetime.fromtimestamp(reminder_data["completed_at"].timestamp())
+                except Exception as e:
+                    print(f"Error converting datetime for reminder {doc.id}: {e}")
+                    # Skip this reminder if datetime conversion fails
+                    continue
+                
+                all_reminders.append(reminder_data)
+        except Exception as e:
+            print(f"Error getting reminders: {e}")
+            return {
+                "patient_id": patient_id,
+                "upcoming_reminders": [],
+                "count": 0,
+                "error": f"Failed to fetch reminders: {str(e)}"
+            }
         
-        # Check if reminder is upcoming using reminder_datetime
-        reminder_datetime = reminder_data.get("reminder_datetime")
-        if isinstance(reminder_datetime, str):
-            reminder_datetime = datetime.fromisoformat(reminder_datetime)
+        # Process reminders based on action type
+        upcoming_reminders = []
         
-        # Only include pending reminders that are within the time window
-        if (reminder_datetime and 
-            now <= reminder_datetime <= future_time and 
-            reminder_data.get("status") == "pending"):
-            upcoming_reminders.append(reminder_data)
-    
-    return {
-        "patient_id": patient_id,
-        "upcoming_reminders": upcoming_reminders,
-        "count": len(upcoming_reminders)
-    }
+        for reminder in all_reminders:
+            try:
+                if reminder.get("status") != "pending":
+                    continue
+                    
+                action = reminder.get("action", "")
+                reminder_type = reminder.get("type", "")
+                medicine = reminder.get("medicine")
+                
+                # Generate reminder description based on type and action
+                if reminder_type == "medication":
+                    if action == "hold":
+                        reminder_desc = f"Hold {medicine} from today"
+                    elif action == "continue":
+                        reminder_desc = f"Continue {medicine} as prescribed"
+                    else:
+                        reminder_desc = f"Take {medicine} today"
+                elif reminder_type == "fasting":
+                    reminder_desc = "Start fasting - no food or drink"
+                elif reminder_type == "bathing":
+                    reminder_desc = "Take special antibacterial bath"
+                elif reminder_type == "substance_use":
+                    reminder_desc = "Avoid alcohol and smoking"
+                else:
+                    reminder_desc = reminder.get("notes", "Reminder")
+                
+                # Handle different action types
+                if action == "continue" and surgery_date:
+                    # For continue action, create daily reminders from now until surgery
+                    current_date = now.date()
+                    surgery_date_only = surgery_date.date()
+                    
+                    while current_date <= surgery_date_only and current_date <= future_time.date():
+                        reminder_datetime = datetime.combine(current_date, datetime.min.time())
+                        
+                        # Only include if within the hours_ahead window
+                        if now <= reminder_datetime <= future_time:
+                            upcoming_reminders.append({
+                                "reminder_id": f"{reminder['id']}_{current_date}",
+                                "reminder_datetime": reminder_datetime.isoformat(),
+                                "reminder_desc": reminder_desc,
+                                "status": "pending",
+                                "type": reminder_type,
+                                "action": action,
+                                "medicine": medicine,
+                                "notes": reminder.get("notes", ""),
+                                "original_reminder_id": reminder["id"]
+                            })
+                        
+                        current_date += timedelta(days=1)
+                
+                else:
+                    # For hold action or other single-time reminders
+                    reminder_datetime = reminder.get("reminder_datetime")
+                    if isinstance(reminder_datetime, str):
+                        reminder_datetime = datetime.fromisoformat(reminder_datetime)
+                    
+                    if reminder_datetime and now <= reminder_datetime <= future_time:
+                        upcoming_reminders.append({
+                            "reminder_id": reminder["id"],
+                            "reminder_datetime": reminder_datetime.isoformat(),
+                            "reminder_desc": reminder_desc,
+                            "status": "pending",
+                            "type": reminder_type,
+                            "action": action,
+                            "medicine": medicine,
+                            "notes": reminder.get("notes", ""),
+                            "original_reminder_id": reminder["id"]
+                        })
+            except Exception as e:
+                print(f"Error processing reminder {reminder.get('id', 'unknown')}: {e}")
+                continue
+        
+        # Sort reminders by datetime
+        upcoming_reminders.sort(key=lambda x: x["reminder_datetime"])
+        
+        return {
+            "patient_id": patient_id,
+            "upcoming_reminders": upcoming_reminders,
+            "count": len(upcoming_reminders)
+        }
+    except Exception as e:
+        print(f"Error in get_upcoming_reminders: {e}")
+        return {
+            "patient_id": patient_id,
+            "upcoming_reminders": [],
+            "count": 0,
+            "error": f"Internal server error: {str(e)}"
+        }
 
 @router.get("/{patient_id}/status")
 def get_patient_status(patient_id: str):
