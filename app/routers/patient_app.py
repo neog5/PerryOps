@@ -5,6 +5,7 @@ from app.schemas_workflow import (
     Patient, PatientScheduleView, ScheduleItem, 
     NotificationRequest, NotificationResponse
 )
+from app.services.task_priority_service import TaskPriorityService
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/patient", tags=["patient-app"])
@@ -70,6 +71,32 @@ def complete_schedule_item(patient_id: str, item_id: str):
     })
     
     return {"message": "Schedule item marked as completed"}
+
+@router.get("/{patient_id}/priority-tasks")
+def get_priority_tasks(patient_id: str):
+    """Get tasks ordered by priority for the patient"""
+    priority_service = TaskPriorityService()
+    tasks = priority_service.get_priority_tasks(patient_id)
+    
+    return {
+        "patient_id": patient_id,
+        "tasks": tasks,
+        "total_tasks": len(tasks),
+        "urgent_tasks": len([t for t in tasks if t.get("hours_until_due", 0) <= 24])
+    }
+
+@router.get("/{patient_id}/urgent-tasks")
+def get_urgent_tasks(patient_id: str, hours_ahead: int = 24):
+    """Get urgent tasks (due within specified hours)"""
+    priority_service = TaskPriorityService()
+    urgent_tasks = priority_service.get_urgent_tasks(patient_id, hours_ahead)
+    
+    return {
+        "patient_id": patient_id,
+        "urgent_tasks": urgent_tasks,
+        "count": len(urgent_tasks),
+        "hours_ahead": hours_ahead
+    }
 
 @router.get("/{patient_id}/upcoming-reminders")
 def get_upcoming_reminders(patient_id: str, hours_ahead: int = 24):

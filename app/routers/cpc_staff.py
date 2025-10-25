@@ -249,3 +249,112 @@ def get_cpc_dashboard():
         rejected_recommendations=rejected_count,
         recent_uploads=recent_uploads
     )
+
+@router.get("/patients/optimization-status")
+def get_all_patients_optimization_status():
+    """Get optimization status for all patients"""
+    db = get_firestore_client()
+    
+    patients_status = []
+    patients_docs = db.collection("patients").stream()
+    
+    for patient_doc in patients_docs:
+        patient_data = patient_doc.to_dict()
+        patient_id = patient_doc.id
+        
+        # Get patient's schedule items
+        schedule_items = []
+        items_docs = db.collection("schedule_items").where("patient_id", "==", patient_id).stream()
+        
+        for item_doc in items_docs:
+            item_data = item_doc.to_dict()
+            schedule_items.append(item_data)
+        
+        # Calculate optimization status
+        total_items = len(schedule_items)
+        completed_items = len([item for item in schedule_items if item.get("patient_completed", False)])
+        missed_items = len([item for item in schedule_items if not item.get("patient_completed", False) and item["scheduled_date"] < datetime.now()])
+        
+        completion_rate = (completed_items / total_items * 100) if total_items > 0 else 0
+        is_optimized = total_items > 0 and completed_items == total_items
+        needs_reschedule = missed_items > 0
+        
+        patients_status.append({
+            "patient_id": patient_id,
+            "patient_name": patient_data.get("name", "Unknown"),
+            "patient_email": patient_data.get("email", ""),
+            "total_schedule_items": total_items,
+            "completed_items": completed_items,
+            "missed_items": missed_items,
+            "completion_rate": round(completion_rate, 1),
+            "is_optimized": is_optimized,
+            "needs_reschedule": needs_reschedule,
+            "status": "optimized" if is_optimized else "not_optimized" if needs_reschedule else "in_progress"
+        })
+    
+    return {
+        "patients": patients_status,
+        "total_patients": len(patients_status),
+        "optimized_patients": len([p for p in patients_status if p["is_optimized"]]),
+        "in_progress_patients": len([p for p in patients_status if p["status"] == "in_progress"]),
+        "not_optimized_patients": len([p for p in patients_status if p["status"] == "not_optimized"])
+    }
+
+@router.get("/patients/{patient_id}/detailed-status")
+def get_patient_detailed_status(patient_id: str):
+    """Get detailed optimization status for a specific patient"""
+    db = get_firestore_client()
+    
+    # Get patient info
+    patient_doc = db.collection("patients").document(patient_id).get()
+    if not patient_doc.exists:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    
+    patient_data = patient_doc.to_dict()
+    
+    # Get schedule items
+    schedule_items = []
+    items_docs = db.collection("schedule_items").where("patient_id", "==", patient_id).stream()
+    
+    for item_doc in items_docs:
+        item_data = item_doc.to_dict()
+        item_data["id"] = item_doc.id
+        schedule_items.append(item_data)
+    
+    # Get surgery info
+    surgery_docs = db.collection("surgeries").where("patient_id", "==", patient_id).order_by("surgery_date", direction="DESCENDING").limit(1).stream()
+    surgery_data = None
+    for doc in surgery_docs:
+        surgery_data = doc.to_dict()
+        break
+    
+    # Calculate detailed status
+    total_items = len(schedule_items)
+    completed_items = len([item for item in schedule_items if item.get("patient_completed", False)])
+    pending_items = len([item for item in schedule_items if not item.get("patient_completed", False) and item["scheduled_date"] > datetime.now()])
+    missed_items = len([item for item in schedule_items if not item.get("patient_completed", False) and item["scheduled_date"] < datetime.now()])
+    
+    completion_rate = (completed_items / total_items * 100) if total_items > 0 else 0
+    is_optimized = total_items > 0 and completed_items == total_items
+    needs_reschedule = missed_items > 0
+    
+    return {
+        "patient": {
+            "id": patient_id,
+            "name": patient_data.get("name", "Unknown"),
+            "email": patient_data.get("email", ""),
+            "phone": patient_data.get("phone", "")
+        },
+        "surgery": surgery_data,
+        "schedule_items": schedule_items,
+        "optimization_status": {
+            "total_schedule_items": total_items,
+            "completed_items": completed_items,
+            "pending_items": pending_items,
+            "missed_items": missed_items,
+            "completion_rate": round(completion_rate, 1),
+            "is_optimized": is_optimized,
+            "needs_reschedule": needs_reschedule,
+            "status": "optimized" if is_optimized else "not_optimized" if needs_reschedule else "in_progress"
+        }
+    }

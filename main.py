@@ -1,11 +1,22 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import cpc_staff, patient_app
+from app.background_tasks import background_manager
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await background_manager.start()
+    yield
+    # Shutdown
+    await background_manager.stop()
 
 app = FastAPI(
     title="PerryOps - Preoperative Optimization API",
     description="API for managing preoperative optimization recommendations and medication reminders",
-    version="2.0.0"
+    version="2.0.0",
+    lifespan=lifespan
 )
 
 # Add CORS middleware
