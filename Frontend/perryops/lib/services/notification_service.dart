@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// Background message handler must be a top-level function.
 @pragma('vm:entry-point')
@@ -68,6 +69,13 @@ class NotificationService {
         sound: true,
         provisional: false,
       );
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      // Android 13+ requires POST_NOTIFICATIONS runtime permission.
+      // This will no-op on older Android versions.
+      final status = await Permission.notification.status;
+      if (!status.isGranted) {
+        await Permission.notification.request();
+      }
     }
   }
 

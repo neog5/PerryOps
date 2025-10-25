@@ -181,34 +181,28 @@ class _HomePageState extends State<HomePage> {
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                          child: DropdownButtonFormField<Patient>(
-                            value: _selectedPatient,
-                            items:
-                                _patients
-                                    .map(
-                                      (p) => DropdownMenuItem<Patient>(
-                                        value: p,
-                                        child: Text(p.name),
-                                      ),
-                                    )
-                                    .toList(),
-                            onChanged:
-                                (v) => setState(() => _selectedPatient = v),
-                            decoration: const InputDecoration(
-                              hintText: 'Choose a patient',
-                              prefixIcon: Icon(Icons.person_search),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
                         OutlinedButton.icon(
                           onPressed: _openPatientSearch,
                           icon: const Icon(Icons.search),
-                          label: const Text('Search'),
+                          label: const Text('Search patients'),
                         ),
+                        if (_selectedPatient != null) ...[
+                          const SizedBox(height: 12),
+                          ListTile(
+                            leading: const Icon(Icons.person),
+                            title: Text(_selectedPatient!.name),
+                            subtitle: Text(_selectedPatient!.email),
+                            trailing: IconButton(
+                              tooltip: 'Clear',
+                              icon: const Icon(Icons.close),
+                              onPressed:
+                                  () => setState(() => _selectedPatient = null),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -224,15 +218,17 @@ class _HomePageState extends State<HomePage> {
                 ],
                 const SizedBox(height: 16),
                 _ActionCard(
-                  title: 'Upload CPC report',
+                  title: 'Generate Patient schedule',
                   icon: Icons.upload_file,
                   enabled: _selectedPatient != null,
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Upload for ${_selectedPatient!.name} coming soon',
-                        ),
+                    if (_selectedPatient == null) return;
+                    Navigator.pushNamed(
+                      context,
+                      '/generate',
+                      arguments: ScheduleArgs(
+                        patientId: _selectedPatient!.id,
+                        patientName: _selectedPatient!.name,
                       ),
                     );
                   },

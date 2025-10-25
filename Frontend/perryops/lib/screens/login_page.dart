@@ -45,7 +45,17 @@ class _LoginPageState extends State<LoginPage> {
       final auth = const AuthService();
       AuthResponse resp;
       if (_selectedType == UserType.staff) {
-        resp = await auth.loginCpc(_emailCtrl.text.trim(), _passwordCtrl.text);
+        // resp = await auth.loginCpc(_emailCtrl.text.trim(), _passwordCtrl.text);
+
+        // Bypass CPC login: use fixed CPC staff user data
+        resp = AuthResponse(
+          userId: 'user_cpc_001',
+          email: 'cpc.staff@hospital.com',
+          name: 'Dr. Sarah Johnson',
+          role: 'cpc_staff',
+          accessToken: '',
+          tokenType: '',
+        );
       } else {
         resp = await auth.loginPatient(
           _emailCtrl.text.trim(),

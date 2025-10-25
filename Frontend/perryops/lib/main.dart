@@ -10,6 +10,9 @@ import 'models/home_args.dart';
 import 'screens/schedule_page.dart';
 import 'models/schedule_args.dart';
 import 'screens/upcoming_reminders_page.dart';
+import 'screens/generate_schedule_page.dart';
+import 'screens/extract_chat_page.dart';
+import 'models/extract_args.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -64,11 +67,29 @@ class PerryOpsApp extends StatelessWidget {
           }
           return MaterialPageRoute(builder: (_) => const LoginPage());
         }
+        if (settings.name == '/generate') {
+          final args = settings.arguments;
+          if (args is ScheduleArgs) {
+            return MaterialPageRoute(
+              builder: (_) => GenerateSchedulePage(args: args),
+            );
+          }
+          return MaterialPageRoute(builder: (_) => const LoginPage());
+        }
         if (settings.name == '/upcoming') {
           final args = settings.arguments;
           if (args is ScheduleArgs) {
             return MaterialPageRoute(
               builder: (_) => UpcomingRemindersPage(args: args),
+            );
+          }
+          return MaterialPageRoute(builder: (_) => const LoginPage());
+        }
+        if (settings.name == '/extract') {
+          final args = settings.arguments;
+          if (args is ExtractArgs) {
+            return MaterialPageRoute(
+              builder: (_) => ExtractChatPage(args: args),
             );
           }
           return MaterialPageRoute(builder: (_) => const LoginPage());
