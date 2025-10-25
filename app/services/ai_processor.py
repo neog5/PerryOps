@@ -63,7 +63,8 @@ class AIProcessor:
                 "type": "medication",
                 "medicine": med["name"],
                 "action": "hold",
-                "reminder_datetime": reminder_datetime
+                "reminder_datetime": reminder_datetime,
+                "notes": f"Hold {med['hold_days']} days before surgery"
             })
 
         # Medication reminders (continue)
@@ -76,7 +77,8 @@ class AIProcessor:
                 "type": "medication",
                 "medicine": med["name"],
                 "action": "continue",
-                "reminder_datetime": None
+                "reminder_datetime": None,
+                "notes": "Continue as prescribed"
             })
 
         # Fasting reminder
@@ -85,7 +87,8 @@ class AIProcessor:
             "type": "fasting",
             "medicine": None,
             "action": "start_fasting",
-            "reminder_datetime": fasting_start
+            "reminder_datetime": fasting_start,
+            "notes": "8hrs before surgery - no food or drink"
         })
 
         # Bathing reminder
@@ -94,7 +97,8 @@ class AIProcessor:
             "type": "bathing",
             "medicine": None,
             "action": "special_bath",
-            "reminder_datetime": bathing_time
+            "reminder_datetime": bathing_time,
+            "notes": "12hrs before surgery - special antibacterial bath"
         })
 
         # Substance use reminder
@@ -103,7 +107,8 @@ class AIProcessor:
             "type": "substance_use",
             "medicine": None,
             "action": "avoid_alcohol",
-            "reminder_datetime": substance_time
+            "reminder_datetime": substance_time,
+            "notes": "24hrs before surgery - avoid alcohol and smoking"
         })
         
         # Add pre-surgery preparation

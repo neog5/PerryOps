@@ -120,6 +120,7 @@ def process_cpc_report(report_id: str, surgery_date: datetime):
             "medicine": item.get("medicine"),
             "action": item["action"],
             "reminder_datetime": item.get("reminder_datetime"),
+            "notes": item.get("notes"),
             "status": "pending",
             "created_at": datetime.now()
         }

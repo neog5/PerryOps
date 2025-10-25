@@ -25,7 +25,7 @@ def patient_login(login_request: LoginRequest):
     
     return login_response
 
-@router.get("/{patient_id}/schedule", response_model=PatientSchedule)
+@router.get("/{patient_id}/schedule")
 def get_patient_schedule(patient_id: str):
     """Get patient's preoperative schedule"""
     db = get_firestore_client()
@@ -37,6 +37,26 @@ def get_patient_schedule(patient_id: str):
     for doc in docs:
         reminder_data = doc.to_dict()
         reminder_data["id"] = doc.id
+        
+        # Convert Firestore datetime objects to strings for JSON serialization
+        if reminder_data.get("reminder_datetime"):
+            if hasattr(reminder_data["reminder_datetime"], 'timestamp'):
+                reminder_data["reminder_datetime"] = datetime.fromtimestamp(reminder_data["reminder_datetime"].timestamp()).isoformat()
+            else:
+                reminder_data["reminder_datetime"] = reminder_data["reminder_datetime"].isoformat()
+        
+        if reminder_data.get("created_at"):
+            if hasattr(reminder_data["created_at"], 'timestamp'):
+                reminder_data["created_at"] = datetime.fromtimestamp(reminder_data["created_at"].timestamp()).isoformat()
+            else:
+                reminder_data["created_at"] = reminder_data["created_at"].isoformat()
+        
+        if reminder_data.get("completed_at"):
+            if hasattr(reminder_data["completed_at"], 'timestamp'):
+                reminder_data["completed_at"] = datetime.fromtimestamp(reminder_data["completed_at"].timestamp()).isoformat()
+            else:
+                reminder_data["completed_at"] = reminder_data["completed_at"].isoformat()
+        
         reminders.append(reminder_data)
     
     # Calculate completion status
@@ -44,20 +64,23 @@ def get_patient_schedule(patient_id: str):
     completed_reminders = len([r for r in reminders if r.get("status") == "completed"])
     is_optimized = total_reminders > 0 and completed_reminders == total_reminders
     
-    # Get surgery date from the earliest reminder
+    # Get surgery date from the latest reminder (closest to surgery)
     surgery_date = None
     if reminders:
-        earliest_reminder = min(reminders, key=lambda x: x.get("scheduled_date", datetime.max))
-        surgery_date = earliest_reminder.get("scheduled_date")
+        # Find the latest reminder_datetime which would be closest to surgery
+        valid_reminders = [r for r in reminders if r.get("reminder_datetime") is not None]
+        if valid_reminders:
+            latest_reminder = max(valid_reminders, key=lambda x: x.get("reminder_datetime"))
+            surgery_date = latest_reminder.get("reminder_datetime")
     
-    return PatientSchedule(
-        patient_id=patient_id,
-        surgery_date=surgery_date,
-        reminders=reminders,
-        total_reminders=total_reminders,
-        completed_reminders=completed_reminders,
-        is_optimized=is_optimized
-    )
+    return {
+        "patient_id": patient_id,
+        "surgery_date": surgery_date,
+        "reminders": reminders[:3],  # Show only first 3 for testing
+        "total_reminders": total_reminders,
+        "completed_reminders": completed_reminders,
+        "is_optimized": is_optimized
+    }
 
 @router.post("/{patient_id}/complete-reminder/{reminder_id}")
 def complete_reminder(patient_id: str, reminder_id: str):
@@ -95,6 +118,16 @@ def get_upcoming_reminders(patient_id: str, hours_ahead: int = 24):
     for doc in docs:
         reminder_data = doc.to_dict()
         reminder_data["id"] = doc.id
+        
+        # Convert Firestore datetime objects to Python datetime
+        if reminder_data.get("reminder_datetime") and hasattr(reminder_data["reminder_datetime"], 'timestamp'):
+            reminder_data["reminder_datetime"] = datetime.fromtimestamp(reminder_data["reminder_datetime"].timestamp())
+        
+        if reminder_data.get("created_at") and hasattr(reminder_data["created_at"], 'timestamp'):
+            reminder_data["created_at"] = datetime.fromtimestamp(reminder_data["created_at"].timestamp())
+        
+        if reminder_data.get("completed_at") and hasattr(reminder_data["completed_at"], 'timestamp'):
+            reminder_data["completed_at"] = datetime.fromtimestamp(reminder_data["completed_at"].timestamp())
         
         # Check if reminder is upcoming using reminder_datetime
         reminder_datetime = reminder_data.get("reminder_datetime")

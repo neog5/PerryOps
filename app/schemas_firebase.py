@@ -78,6 +78,7 @@ class ReminderBase(BaseModel):
     medicine: Optional[str] = None  # For medication type
     action: str  # "hold", "continue", "start_fasting", etc.
     reminder_datetime: Optional[datetime] = None  # Specific datetime for hold actions, null for continue
+    notes: Optional[str] = None  # Plain text description like "8hrs before surgery"
 
 class ReminderCreate(ReminderBase):
     pass
