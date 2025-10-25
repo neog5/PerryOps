@@ -27,8 +27,8 @@ class NotificationScheduler:
         while self.running:
             try:
                 await self.check_and_send_notifications()
-                # Check every 5 minutes
-                await asyncio.sleep(300)
+                # Check every 30s
+                await asyncio.sleep(30)
             except Exception as e:
                 logger.error(f"Error in scheduler: {e}")
                 await asyncio.sleep(60)
@@ -54,17 +54,18 @@ class NotificationScheduler:
             logger.error(f"Error checking notifications: {e}")
     
     def get_pending_reminders(self) -> List[Dict[str, Any]]:
-        """Get all pending reminders from database"""
+        """Get all pending and sent reminders from database"""
         try:
             reminders = []
-            docs = self.db.collection("reminders").where("status", "==", "pending").stream()
+            # Get both pending and sent reminders (not completed)
+            docs = self.db.collection("reminders").where("status", "in", ["pending", "sent"]).stream()
             
             for doc in docs:
                 reminder_data = doc.to_dict()
                 reminder_data["id"] = doc.id
                 reminders.append(reminder_data)
             
-            logger.info(f"📋 Found {len(reminders)} pending reminders")
+            logger.info(f"📋 Found {len(reminders)} pending/sent reminders")
             return reminders
             
         except Exception as e:
@@ -78,13 +79,13 @@ class NotificationScheduler:
             action = reminder.get("action", "")
             patient_id = reminder.get("patient_id")
             
-            # Case 1: Continue medications - send immediately (reminder_datetime is null)
-            # But only if it hasn't been sent yet (no sent_at timestamp)
-            if action == "continue" and not reminder.get("reminder_datetime") and not reminder.get("sent_at"):
+            # Case 1: Continue medications - send repeatedly until completed
+            # Send every hour for continue medications (reminder_datetime is null)
+            if action == "continue" and not reminder.get("reminder_datetime"):
                 logger.info(f"⏰ Sending continue reminder for patient {patient_id}: {reminder['medicine']} - {reminder['action']}")
                 await self.send_reminder_notification(reminder)
             
-            # Case 2: Hold/other reminders - send at scheduled time
+            # Case 2: Hold/other reminders - send if time has passed and its not complete
             elif reminder.get("reminder_datetime"):
                 reminder_datetime_str = reminder.get("reminder_datetime")
                 if isinstance(reminder_datetime_str, str):
@@ -99,11 +100,9 @@ class NotificationScheduler:
                 if current_time.tzinfo is None:
                     current_time = current_time.replace(tzinfo=timezone.utc)
                 
-                # Check if it's time to send (within 4 minute tolerance)
-                time_diff = (reminder_datetime - current_time).total_seconds()
-                
-                if 0 <= time_diff <= 240:  # Due within 4 minutes
-                    logger.info(f"⏰ Sending scheduled reminder for patient {patient_id}: {reminder['medicine']} - {reminder['action']}")
+                # Send if time has passed (overdue reminders)
+                if reminder_datetime <= current_time:
+                    logger.info(f"⏰ Sending overdue reminder for patient {patient_id}: {reminder['medicine']} - {reminder['action']}")
                     await self.send_reminder_notification(reminder)
                         
         except Exception as e:
