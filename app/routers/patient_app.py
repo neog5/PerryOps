@@ -3,11 +3,27 @@ from typing import List
 from app.firebase_client import get_firestore_client, send_push_notification
 from app.schemas_firebase import (
     Patient, PatientSchedule, Reminder, 
-    NotificationRequest
+    NotificationRequest, LoginRequest, LoginResponse
 )
+from app.services.auth_service import AuthService
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/patient", tags=["patient-app"])
+
+@router.post("/login", response_model=LoginResponse)
+def patient_login(login_request: LoginRequest):
+    """Login for patients"""
+    auth_service = AuthService()
+    login_response = auth_service.login(login_request)
+    
+    if not login_response:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Check if user is a patient
+    if login_response.role != "patient":
+        raise HTTPException(status_code=403, detail="Access denied. Patients only.")
+    
+    return login_response
 
 @router.get("/{patient_id}/schedule", response_model=PatientSchedule)
 def get_patient_schedule(patient_id: str):

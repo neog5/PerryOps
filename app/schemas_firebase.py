@@ -106,3 +106,16 @@ class NotificationRequest(BaseModel):
     title: str
     body: str
     data: Optional[Dict[str, str]] = None
+
+# Authentication Schemas
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class LoginResponse(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    role: UserRole
+    access_token: str
+    token_type: str = "bearer"

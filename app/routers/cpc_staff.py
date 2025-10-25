@@ -3,13 +3,29 @@ from typing import List, Dict, Any
 from app.firebase_client import get_firestore_client
 from app.schemas_firebase import (
     Patient, PatientCreate, CPCReport, CPCReportCreate, 
-    Reminder, ReminderCreate, CPCDashboard
+    Reminder, ReminderCreate, CPCDashboard, LoginRequest, LoginResponse
 )
+from app.services.auth_service import AuthService
 from app.services.ai_processor import AIProcessor
 from datetime import datetime
 import uuid
 
 router = APIRouter(prefix="/cpc", tags=["cpc-staff"])
+
+@router.post("/login", response_model=LoginResponse)
+def cpc_login(login_request: LoginRequest):
+    """Login for CPC staff"""
+    auth_service = AuthService()
+    login_response = auth_service.login(login_request)
+    
+    if not login_response:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Check if user is CPC staff
+    if login_response.role != "cpc_staff":
+        raise HTTPException(status_code=403, detail="Access denied. CPC staff only.")
+    
+    return login_response
 
 @router.get("/patients", response_model=List[Patient])
 def get_all_patients():
