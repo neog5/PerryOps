@@ -134,3 +134,20 @@ Frontend/perryops/ios/Pods/
 Frontend/perryops/macos/DerivedData/
 
 # End of file
+# --- LLM folder specific rules ---
+# API uploads and sessions
+LLM/uploads/
+LLM/*.session
+
+# Keep generated synthetic data in version control
+!LLM/synthetic_data/**
+
+# Ignore Jupyter notebook agent
+LLM/agent.ipynb
+
+# Ignore local API test script
+LLM/test_api.py
+
+# Project specific (if not already present)
+LLM/output/
+LLM/results/
